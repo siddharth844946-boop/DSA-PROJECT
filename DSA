@@ -1,0 +1,297 @@
+#----------------------------------------------------------------DSA PROJECT------------------------------------------------------------------------------#
+=========================================================PARKING MANEGEMENT SYSTEM=========================================================================
+CODE:
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+#define MAX_SLOTS 5
+#define MAX_QUEUE 100
+
+typedef struct Vehicle {
+    char number[20];
+    time_t entryTime;
+    int slot;
+    struct Vehicle *next;
+} Vehicle;
+
+Vehicle *head = NULL;
+
+char waiting[MAX_QUEUE][20];
+int front = 0, rear = 0, count = 0;
+int occupied = 0;
+
+/* Save vehicle entry in file */
+void saveRecord(char number[], char action[], double fee) {
+    FILE *fp = fopen("parking_records.txt", "a");
+
+    if (fp == NULL) {
+        printf("Error opening file!\n");
+        return;
+    }
+
+    time_t now = time(NULL);
+
+    fprintf(fp, "%s | %s | %s | Fee: Rs. %.2f\n",
+            number, action, ctime(&now), fee);
+
+    fclose(fp);
+}
+
+/* Search vehicle using linked list */
+Vehicle *searchVehicle(char number[]) {
+    Vehicle *temp = head;
+
+    while (temp != NULL) {
+        if (strcmp(temp->number, number) == 0)
+            return temp;
+
+        temp = temp->next;
+    }
+
+    return NULL;
+}
+
+/* Park a vehicle */
+void parkVehicle(char number[]) {
+    if (occupied >= MAX_SLOTS) {
+        printf("Parking is full!\n");
+        return;
+    }
+
+    if (searchVehicle(number) != NULL) {
+        printf("Vehicle already parked!\n");
+        return;
+    }
+
+    Vehicle *newVehicle =
+        (Vehicle *)malloc(sizeof(Vehicle));
+
+    if (newVehicle == NULL) {
+        printf("Memory allocation failed!\n");
+        return;
+    }
+
+    strcpy(newVehicle->number, number);
+    newVehicle->entryTime = time(NULL);
+    newVehicle->slot = occupied + 1;
+
+    newVehicle->next = head;
+    head = newVehicle;
+    occupied++;
+
+    printf("\nVehicle parked successfully!\n");
+    printf("Vehicle Number: %s\n", number);
+    printf("Parking Slot: %d\n", newVehicle->slot);
+
+    saveRecord(number, "ENTRY", 0);
+}
+
+/* Add vehicle to waiting queue */
+void addVehicle() {
+    char number[20];
+
+    printf("Enter vehicle number: ");
+    scanf("%19s", number);
+
+    if (searchVehicle(number) != NULL) {
+        printf("Vehicle is already parked!\n");
+        return;
+    }
+
+    if (occupied < MAX_SLOTS) {
+        parkVehicle(number);
+    } else if (count < MAX_QUEUE) {
+        strcpy(waiting[rear], number);
+        rear = (rear + 1) % MAX_QUEUE;
+        count++;
+
+        printf("Parking full! Vehicle added to waiting queue.\n");
+    } else {
+        printf("Waiting queue is full!\n");
+    }
+}
+
+/* Remove vehicle and calculate fee */
+void exitVehicle() {
+    char number[20];
+
+    printf("Enter vehicle number to exit: ");
+    scanf("%19s", number);
+
+    Vehicle *temp = head;
+    Vehicle *prev = NULL;
+
+    while (temp != NULL &&
+           strcmp(temp->number, number) != 0) {
+        prev = temp;
+        temp = temp->next;
+    }
+
+    if (temp == NULL) {
+        printf("Vehicle not found!\n");
+        return;
+    }
+
+    double seconds = difftime(time(NULL), temp->entryTime);
+    int hours = (int)(seconds / 3600);
+
+    if (seconds > hours * 3600)
+        hours++;
+
+    if (hours < 1)
+        hours = 1;
+
+    double fee = hours * 20.0;
+
+    printf("\nVehicle Number: %s\n", temp->number);
+    printf("Parking Duration: %d hour(s)\n", hours);
+    printf("Total Fee: Rs. %.2f\n", fee);
+
+    saveRecord(temp->number, "EXIT", fee);
+
+    if (prev == NULL)
+        head = temp->next;
+    else
+        prev->next = temp->next;
+
+    free(temp);
+    occupied--;
+
+    printf("Vehicle exited successfully!\n");
+
+    /* Give the freed slot to the first waiting vehicle */
+    if (count > 0) {
+        char nextNumber[20];
+        strcpy(nextNumber, waiting[front]);
+
+        front = (front + 1) % MAX_QUEUE;
+        count--;
+
+        printf("\nNext waiting vehicle: %s\n", nextNumber);
+        parkVehicle(nextNumber);
+    }
+}
+
+/* Display currently parked vehicles */
+void displayVehicles() {
+    Vehicle *temp = head;
+
+    printf("\n--- PARKED VEHICLES ---\n");
+
+    if (temp == NULL) {
+        printf("No vehicles parked.\n");
+        return;
+    }
+
+    while (temp != NULL) {
+        printf("Vehicle: %s | Slot: %d\n",
+               temp->number, temp->slot);
+        temp = temp->next;
+    }
+}
+
+/* Search vehicle */
+void searchMenu() {
+    char number[20];
+
+    printf("Enter vehicle number to search: ");
+    scanf("%19s", number);
+
+    Vehicle *v = searchVehicle(number);
+
+    if (v != NULL) {
+        printf("Vehicle found!\n");
+        printf("Number: %s\n", v->number);
+        printf("Slot: %d\n", v->slot);
+    } else {
+        printf("Vehicle not found in parking.\n");
+    }
+}
+
+/* Show waiting queue */
+void displayQueue() {
+    printf("\n--- WAITING QUEUE ---\n");
+
+    if (count == 0) {
+        printf("No vehicles waiting.\n");
+        return;
+    }
+
+    for (int i = 0; i < count; i++) {
+        int index = (front + i) % MAX_QUEUE;
+        printf("%d. %s\n", i + 1, waiting[index]);
+    }
+}
+
+/* Main menu */
+int main() {
+    int choice;
+
+    do {
+        printf("\n================================\n");
+        printf("   PARKING MANAGEMENT SYSTEM\n");
+        printf("================================\n");
+        printf("1. Vehicle Entry\n");
+        printf("2. Vehicle Exit\n");
+        printf("3. Display Parked Vehicles\n");
+        printf("4. Search Vehicle\n");
+        printf("5. Display Waiting Queue\n");
+        printf("6. Show Parking Status\n");
+        printf("0. Exit\n");
+        printf("Enter your choice: ");
+
+        if (scanf("%d", &choice) != 1) {
+            printf("Invalid input!\n");
+            break;
+        }
+
+        switch (choice) {
+            case 1:
+                addVehicle();
+                break;
+
+            case 2:
+                exitVehicle();
+                break;
+
+            case 3:
+                displayVehicles();
+                break;
+
+            case 4:
+                searchMenu();
+                break;
+
+            case 5:
+                displayQueue();
+                break;
+
+            case 6:
+                printf("Total Slots: %d\n", MAX_SLOTS);
+                printf("Occupied Slots: %d\n", occupied);
+                printf("Available Slots: %d\n",
+                       MAX_SLOTS - occupied);
+                printf("Waiting Vehicles: %d\n", count);
+                break;
+
+            case 0:
+                printf("Thank you for using the system!\n");
+                break;
+
+            default:
+                printf("Invalid choice!\n");
+        }
+
+    } while (choice != 0);
+
+    while (head != NULL) {
+        Vehicle *temp = head;
+        head = head->next;
+        free(temp);
+    }
+
+    return 0;
+}
